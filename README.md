@@ -1,19 +1,41 @@
-# RubyTEST
+class WorkInfo < ActiveRecord::Base
+  belongs_to :user
+  has_one :key_management, :foreign_key => :user_id, :primary_key => :user_id, :dependent => :destroy
+  #before_save :encrypt_ssn
 
-
-  scope :hits_by_ip, ->(ip,col="*") { select("#{col}").where(:ip_address => ip).order("id DESC")}
-
-  def self.count_by_col(col)
-    calculate(:count, col)
+  # We should probably use this
+  def last_four
+    "***-**-" << self.decrypt_ssn[-4,4]
   end
 
-  def self.parse_field(field)
-    valid_fields = ["ip_address", "referrer", "user_agent"]
+  def encrypt_ssn
+    aes = OpenSSL::Cipher::Cipher.new(cipher_type)
+    aes.encrypt
+    aes.key = key
+    aes.iv = iv if iv != nil
+    self.encrypted_ssn = aes.update(self.SSN) + aes.final
+    self.SSN = nil
+  end
 
-    if valid_fields.include?(field)
-      field
-    else
-      "1"
-    end
+  def decrypt_ssn
+    aes = OpenSSL::Cipher::Cipher.new(cipher_type)
+    aes.decrypt
+    aes.key = key
+    aes.iv = iv if iv != nil
+    aes.update(self.encrypted_ssn) + aes.final
+  end
+
+  def key
+    raise "Key Missing" if !(KEY)
+    KEY
+  end
+
+  def iv
+    raise "No IV for this User" if !(self.key_management.iv)
+    self.key_management.iv
+  end
+
+  def cipher_type
+    'aes-256-cbc'
   end
 end
